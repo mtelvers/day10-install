@@ -31,22 +31,26 @@ let build verbose_level debug_level name test doc dev_setup =
       let src = source_dir pkg in
       let build_dir = OpamPath.Switch.build_dir st.switch_global.root st.switch in
       let build_dir = OpamFilename.SubPath.(build_dir / of_string name) in
-      match OpamSwitchState.depexts_unavailable st pkg with
-      | Some missing ->
-          let names = List.rev_map OpamSysPkg.to_string (OpamSysPkg.Set.elements missing) in
-          let pkgs = match names with
-            | [p] -> " '" ^ p ^ "'"
-            | ps -> "s " ^ OpamStd.Format.pretty_list (List.rev_map (Printf.sprintf "'%s'") ps)
-          in
-          OpamConsole.error
-            "Package %s depends on the unavailable system package%s. You can use \
-             `--no-depexts' to attempt installation anyway.%s"
-            name pkgs
-            (OpamStd.Option.map_default (Printf.sprintf "\n%s.") ""
-               (OpamSysInteract.repo_enablers ~env:st.switch_global.global_variables st.switch_global.config));
-          1
-      | None ->
-      ignore (OpamSolution.install_depexts ~confirm:false ~pkg_to_install:(OpamPackage.Set.singleton pkg) ~pkg_installed:st.installed st);
+      (* Checking depexts queries the system package manager for every depext in the switch, so skip it
+         when this package has none *)
+      if not (OpamSysPkg.Set.is_empty (OpamSwitchState.depexts st pkg)) then begin
+        match OpamSwitchState.depexts_unavailable st pkg with
+        | Some missing ->
+            let names = List.rev_map OpamSysPkg.to_string (OpamSysPkg.Set.elements missing) in
+            let pkgs = match names with
+              | [p] -> " '" ^ p ^ "'"
+              | ps -> "s " ^ OpamStd.Format.pretty_list (List.rev_map (Printf.sprintf "'%s'") ps)
+            in
+            OpamConsole.error
+              "Package %s depends on the unavailable system package%s. You can use \
+               `--no-depexts' to attempt installation anyway.%s"
+              name pkgs
+              (OpamStd.Option.map_default (Printf.sprintf "\n%s.") ""
+                 (OpamSysInteract.repo_enablers ~env:st.switch_global.global_variables st.switch_global.config));
+            OpamStd.Sys.exit_because `Not_found
+        | None ->
+            ignore (OpamSolution.install_depexts ~confirm:false ~pkg_to_install:(OpamPackage.Set.singleton pkg) ~pkg_installed:st.installed st)
+      end;
       OpamAction.download_package st pkg |> OpamProcess.Job.run |> function
       | Some (_, e) ->
           Printf.printf "download failed... %s\n" e;
