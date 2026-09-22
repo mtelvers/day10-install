@@ -1,0 +1,11 @@
+lib: [
+  "_build/install/default/lib/day10-install/META"
+  "_build/install/default/lib/day10-install/dune-package"
+  "_build/install/default/lib/day10-install/opam"
+]
+bin: [
+  "_build/install/default/bin/day10-install"
+]
+doc: [
+  "_build/install/default/doc/day10-install/README.md"
+]

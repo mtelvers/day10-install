@@ -1,36 +1,36 @@
 (executable
- (public_name opam-build)
+ (public_name day10-install)
  (name main)
  (enabled_if (and (= %{os_type} Unix) (<> %{system} freebsd) (= %{architecture} amd64)))
  (libraries opam-client))
 
 (executable
- (public_name opam-build)
+ (public_name day10-install)
  (name main)
  (enabled_if (and (= %{os_type} Unix) (<> %{system} freebsd) (= %{architecture} arm64)))
  (libraries opam-client))
 
 (executable
- (public_name opam-build)
+ (public_name day10-install)
  (name main)
  (enabled_if (and (= %{os_type} Unix) (<> %{system} freebsd) (= %{architecture} power)))
  (libraries opam-client))
 
 (executable
- (public_name opam-build)
+ (public_name day10-install)
  (name main)
  (enabled_if (and (= %{os_type} Unix) (<> %{system} freebsd) (= %{architecture} riscv)))
  (libraries opam-client))
 
 (executable
- (public_name opam-build)
+ (public_name day10-install)
  (name main)
  (enabled_if (= %{os_type} Win32))
  (flags (:standard -noautolink -cclib -lunixnat -cclib -lmccs_stubs -cclib -lmccs_glpk_stubs -cclib -lsha_stubs -cclib -lopam_core_stubs -cclib -l:libstdc++.a -cclib -l:libpthread.a -cclib -Wl,-static -cclib -ladvapi32 -cclib -lgdi32 -cclib -luser32 -cclib -lshell32 -cclib -lole32 -cclib -luuid -cclib -luserenv -cclib -lwindowsapp))
  (libraries opam-client))
 
 (executable
- (public_name opam-build)
+ (public_name day10-install)
  (name main)
  (enabled_if (and (= %{os_type} Unix) (= %{system} freebsd)))
  (flags (:standard -ccopt -Wl,-Bstatic -ccopt -Wl,-Bdynamic))

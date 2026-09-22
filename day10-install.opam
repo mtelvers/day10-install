@@ -6,8 +6,8 @@ description:
 maintainer: ["Mark Elvers"]
 authors: ["Mark Elvers"]
 license: "MIT"
-homepage: "https://github.com/mtelvers/opam-build"
-bug-reports: "https://github.com/mtelvers/opam-build/issues"
+homepage: "https://github.com/mtelvers/day10-install"
+bug-reports: "https://github.com/mtelvers/day10-install/issues"
 depends: [
   "ocaml" {>= "5.3.0"}
   "dune" {>= "3.16"}
@@ -29,7 +29,7 @@ build: [
     "@doc" {with-doc}
   ]
 ]
-dev-repo: "git+https://github.com/mtelvers/opam-build.git"
+dev-repo: "git+https://github.com/mtelvers/day10-install.git"
 pin-depends: [
   ["opam-client.2.4.1" "git+https://github.com/dra27/opam#6693-2.4.1"]
   ["opam-core.2.4.1" "git+https://github.com/dra27/opam#6693-2.4.1"]

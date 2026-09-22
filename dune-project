@@ -1,11 +1,11 @@
 (lang dune 3.16)
 
-(name opam-build)
+(name day10-install)
 
 (generate_opam_files true)
 
 (source
- (github mtelvers/opam-build))
+ (github mtelvers/day10-install))
 
 (authors "Mark Elvers")
 
@@ -14,7 +14,7 @@
 (license MIT)
 
 (package
- (name opam-build)
+ (name day10-install)
  (synopsis "Extract the build commands from an opam file.")
  (description "Extract and optionally execute the build commands from an opam file.")
  (depends

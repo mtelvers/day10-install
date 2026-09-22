@@ -101,7 +101,7 @@ let with_dev_setup = Arg.(value & flag & info [ "with-dev-setup" ] ~docv:"WITH-D
 
 let cmd =
   let doc = "Installs an opam package in the default switch. No checks, no questions asked." in
-  let info = Cmd.info "opam-build" ~version:"%%VERSION%%" ~doc in
+  let info = Cmd.info "day10-install" ~version:"%%VERSION%%" ~doc in
   Cmd.v info Term.(const build $ verbose_level $ debug_level $ package_name $ with_test $ with_doc $ with_dev_setup)
 
 let () = exit (Cmd.eval' cmd)
