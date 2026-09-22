@@ -1,5 +1,18 @@
 open Cmdliner
 
+(* Report a failed package action the way opam does (see OpamSolution.display_error) and return the exit code *)
+let display_error action pkg = function
+  | (OpamStd.Sys.Exit _ | Sys.Break) as e -> raise e
+  | e ->
+      let msg =
+        match e with
+        | Failure s -> s
+        | OpamSystem.Process_error r -> OpamProcess.string_of_result r
+        | e -> Printexc.to_string e
+      in
+      OpamConsole.header_error "while %s %s" action (OpamPackage.to_string pkg) "%s" msg;
+      1
+
 let build verbose_level debug_level name test doc dev_setup =
   OpamSystem.init ();
   let yes = Some (Some true) in
@@ -57,20 +70,16 @@ let build verbose_level debug_level name test doc dev_setup =
           1
       | None -> (
           OpamAction.prepare_package_source st pkg src |> OpamProcess.Job.run |> function
-          | Some exn ->
-              Printf.printf "prepare failed... %s\n" (OpamStd.Exn.pretty_backtrace exn);
-              1
+          | Some exn -> display_error "preparing sources for" pkg exn
           | None -> (
               OpamFilename.copy_dir ~src ~dst:build_dir;
-              OpamAction.build_package st ~test ~doc ~dev_setup build_dir pkg |> OpamProcess.Job.run |> function
-              | Some exn ->
-                  Printf.printf "build failed... %s\n" (OpamStd.Exn.pretty_backtrace exn);
-                  1
+              OpamProcess.Job.catch (fun e -> OpamProcess.Job.Op.Done (Some e)) (fun () -> OpamAction.build_package st ~test ~doc ~dev_setup build_dir pkg)
+              |> OpamProcess.Job.run |> function
+              | Some exn -> display_error "compiling" pkg exn
               | None -> (
-                  OpamAction.install_package st ~test ~doc ~dev_setup ~build_dir pkg |> OpamProcess.Job.run |> function
-                  | Right exn ->
-                      Printf.printf "install failed... %s\n" (OpamStd.Exn.pretty_backtrace exn);
-                      1
+                  OpamProcess.Job.catch (fun e -> OpamProcess.Job.Op.Done (OpamCompat.Either.Right e)) (fun () -> OpamAction.install_package st ~test ~doc ~dev_setup ~build_dir pkg)
+                  |> OpamProcess.Job.run |> function
+                  | Right exn -> display_error "installing" pkg exn
                   | Left conf ->
                       let conf_files =
                         let add_conf conf = OpamPackage.Name.Map.add pkg.name conf st.conf_files in
