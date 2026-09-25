@@ -13,8 +13,7 @@ let display_error action pkg = function
       OpamConsole.header_error "while %s %s" action (OpamPackage.to_string pkg) "%s" msg;
       1
 
-let build verbose_level debug_level name test doc dev_setup =
-  try
+let init_opam verbose_level debug_level =
   OpamSystem.init ();
   (* The *Config.init functions read OPAM* environment variables from a table that these two calls populate *)
   OpamArg.preinit_opam_env_variables ();
@@ -27,28 +26,38 @@ let build verbose_level debug_level name test doc dev_setup =
   OpamFormatConfig.init ();
   OpamRepositoryConfig.init ();
   OpamStateConfig.init ();
-  OpamClientConfig.init ();
-  let gt = OpamGlobalState.load `Lock_none in
-  let switches = OpamGlobalState.switches gt in
-  (* I'd rather do this: let switch = OpamStateConfig.get_current_switch_from_cwd (OpamFilename.cwd ()) in *)
-  let switch = List.hd switches in
-  OpamGlobalState.with_ `Lock_none @@ fun gt ->
-  OpamSwitchState.with_ `Lock_write gt ~switch (fun st ->
-      let source_dir nv =
-        let opam = OpamSwitchState.opam st nv in
-        let raw = OpamSwitchState.source_dir st nv in
-        match OpamFile.OPAM.url opam with
-        | None -> raw
-        | Some url -> OpamFilename.SubPath.(raw /? OpamFile.URL.subpath url)
-      in
-      let pkg =
-        match OpamPackage.of_string_opt name with
-        | None -> OpamConsole.error_and_exit `Bad_arguments "Invalid package %S, expected NAME.VERSION" name
-        | Some pkg when OpamSwitchState.opam_opt st pkg = None ->
-            OpamConsole.error_and_exit `Not_found "%s" (OpamSwitchState.not_found_message st (OpamSolution.eq_atom_of_package pkg))
-        | Some pkg -> pkg
-      in
-      let src = source_dir pkg in
+  OpamClientConfig.init ()
+
+(* Run [f] on the first switch, with the write lock, converting opam's exit requests into an exit code *)
+let with_switch_state f =
+  try
+    let gt = OpamGlobalState.load `Lock_none in
+    let switches = OpamGlobalState.switches gt in
+    (* I'd rather do this: let switch = OpamStateConfig.get_current_switch_from_cwd (OpamFilename.cwd ()) in *)
+    let switch = List.hd switches in
+    OpamGlobalState.with_ `Lock_none @@ fun gt ->
+    OpamSwitchState.with_ `Lock_write gt ~switch f
+  with OpamStd.Sys.Exit n -> n
+
+let source_dir st nv =
+  let opam = OpamSwitchState.opam st nv in
+  let raw = OpamSwitchState.source_dir st nv in
+  match OpamFile.OPAM.url opam with
+  | None -> raw
+  | Some url -> OpamFilename.SubPath.(raw /? OpamFile.URL.subpath url)
+
+let parse_package st name =
+  match OpamPackage.of_string_opt name with
+  | None -> OpamConsole.error_and_exit `Bad_arguments "Invalid package %S, expected NAME.VERSION" name
+  | Some pkg when OpamSwitchState.opam_opt st pkg = None ->
+      OpamConsole.error_and_exit `Not_found "%s" (OpamSwitchState.not_found_message st (OpamSolution.eq_atom_of_package pkg))
+  | Some pkg -> pkg
+
+let build verbose_level debug_level name test doc dev_setup =
+  init_opam verbose_level debug_level;
+  with_switch_state (fun st ->
+      let pkg = parse_package st name in
+      let src = source_dir st pkg in
       let build_dir = OpamPath.Switch.build_dir st.switch_global.root st.switch in
       let build_dir = OpamFilename.SubPath.(build_dir / of_string name) in
       (* Checking depexts queries the system package manager for every depext in the switch, so skip it
@@ -93,7 +102,37 @@ let build verbose_level debug_level name test doc dev_setup =
                         OpamStd.Option.map_default add_conf st.conf_files conf in
                       ignore (OpamSwitchAction.add_to_installed { st with conf_files } pkg);
                       0))))
-  with OpamStd.Sys.Exit n -> n
+
+let uninstall verbose_level debug_level name =
+  init_opam verbose_level debug_level;
+  with_switch_state (fun st ->
+      let pkg = parse_package st name in
+      if not (OpamPackage.Set.mem pkg st.installed) then (
+        OpamConsole.note "%s is not installed." name;
+        0)
+      else
+        let open OpamProcess.Job.Op in
+        let job () =
+          (if OpamAction.removal_needs_download st pkg then (
+             (* The remove: commands run from the package source, recreated under the switch's remove directory *)
+             let d = OpamPath.Switch.remove st.switch_global.root st.switch pkg in
+             OpamFilename.rmdir d;
+             let src = source_dir st pkg in
+             if OpamFilename.exists_dir src then OpamFilename.copy_dir ~src ~dst:d else OpamFilename.mkdir d;
+             OpamAction.prepare_package_source st pkg d)
+           else Done None)
+          @@+ fun _ -> OpamAction.remove_package st pkg
+        in
+        let rc =
+          OpamProcess.Job.catch (fun e -> Done (Some e)) (fun () -> job () @@| fun () -> None)
+          |> OpamProcess.Job.run |> function
+          | Some exn -> display_error "removing" pkg exn
+          | None -> 0
+        in
+        (* Like opam, deregister the package even if its removal reported errors *)
+        let st = OpamSwitchAction.remove_from_installed st pkg in
+        OpamAction.cleanup_package_artefacts st pkg;
+        rc)
 
 let package_name = Arg.(value & pos 0 string "" & info ~docv:"PACKAGE-NAME" ~doc:"The name and version of the package in the format pkg.x.y.z." [])
 
@@ -107,9 +146,14 @@ let with_doc = Arg.(value & flag & info [ "with-doc" ] ~docv:"WITH-DOC" ~doc:"Bu
 
 let with_dev_setup = Arg.(value & flag & info [ "with-dev-setup" ] ~docv:"WITH-DEV-SETUP" ~doc:"Run package dev setup")
 
+let uninstall_flag = Arg.(value & flag & info [ "uninstall" ] ~doc:"Uninstall the package instead of installing it. Dependent packages are left as they are.")
+
+let main verbose_level debug_level name test doc dev_setup remove =
+  if remove then uninstall verbose_level debug_level name else build verbose_level debug_level name test doc dev_setup
+
 let cmd =
   let doc = "Installs an opam package in the default switch. No checks, no questions asked." in
   let info = Cmd.info "day10-install" ~version:"%%VERSION%%" ~doc in
-  Cmd.v info Term.(const build $ verbose_level $ debug_level $ package_name $ with_test $ with_doc $ with_dev_setup)
+  Cmd.v info Term.(const main $ verbose_level $ debug_level $ package_name $ with_test $ with_doc $ with_dev_setup $ uninstall_flag)
 
 let () = exit (Cmd.eval' cmd)
