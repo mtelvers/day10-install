@@ -53,10 +53,8 @@ let parse_package st name =
       OpamConsole.error_and_exit `Not_found "%s" (OpamSwitchState.not_found_message st (OpamSolution.eq_atom_of_package pkg))
   | Some pkg -> pkg
 
-let build verbose_level debug_level name test doc dev_setup =
-  init_opam verbose_level debug_level;
-  with_switch_state (fun st ->
-      let pkg = parse_package st name in
+let install_package st pkg test doc dev_setup =
+      let name = OpamPackage.to_string pkg in
       let src = source_dir st pkg in
       let build_dir = OpamPath.Switch.build_dir st.switch_global.root st.switch in
       let build_dir = OpamFilename.SubPath.(build_dir / of_string name) in
@@ -101,15 +99,13 @@ let build verbose_level debug_level name test doc dev_setup =
                         let add_conf conf = OpamPackage.Name.Map.add pkg.name conf st.conf_files in
                         OpamStd.Option.map_default add_conf st.conf_files conf in
                       ignore (OpamSwitchAction.add_to_installed { st with conf_files } pkg);
-                      0))))
+                      0)))
 
-let uninstall verbose_level debug_level name =
-  init_opam verbose_level debug_level;
-  with_switch_state (fun st ->
-      let pkg = parse_package st name in
+(* Returns the exit code and the switch state after removal *)
+let uninstall_package (st : OpamStateTypes.rw OpamStateTypes.switch_state) pkg =
       if not (OpamPackage.Set.mem pkg st.installed) then (
-        OpamConsole.note "%s is not installed." name;
-        0)
+        OpamConsole.note "%s is not installed." (OpamPackage.to_string pkg);
+        (0, st))
       else
         let open OpamProcess.Job.Op in
         let job () =
@@ -132,7 +128,23 @@ let uninstall verbose_level debug_level name =
         (* Like opam, deregister the package even if its removal reported errors *)
         let st = OpamSwitchAction.remove_from_installed st pkg in
         OpamAction.cleanup_package_artefacts st pkg;
-        rc)
+        (rc, st)
+
+let build verbose_level debug_level name test doc dev_setup =
+  init_opam verbose_level debug_level;
+  with_switch_state (fun st -> install_package st (parse_package st name) test doc dev_setup)
+
+let uninstall verbose_level debug_level name =
+  init_opam verbose_level debug_level;
+  with_switch_state (fun st -> fst (uninstall_package st (parse_package st name)))
+
+let reinstall verbose_level debug_level name test doc dev_setup =
+  init_opam verbose_level debug_level;
+  with_switch_state (fun st ->
+      let pkg = parse_package st name in
+      match uninstall_package st pkg with
+      | 0, st -> install_package st pkg test doc dev_setup
+      | rc, _ -> rc)
 
 let package_name = Arg.(value & pos 0 string "" & info ~docv:"PACKAGE-NAME" ~doc:"The name and version of the package in the format pkg.x.y.z." [])
 
@@ -148,12 +160,16 @@ let with_dev_setup = Arg.(value & flag & info [ "with-dev-setup" ] ~docv:"WITH-D
 
 let uninstall_flag = Arg.(value & flag & info [ "uninstall" ] ~doc:"Uninstall the package instead of installing it. Dependent packages are left as they are.")
 
-let main verbose_level debug_level name test doc dev_setup remove =
-  if remove then uninstall verbose_level debug_level name else build verbose_level debug_level name test doc dev_setup
+let reinstall_flag = Arg.(value & flag & info [ "reinstall" ] ~doc:"Uninstall the package first if it is installed, then install it.")
+
+let main verbose_level debug_level name test doc dev_setup remove re =
+  if remove then uninstall verbose_level debug_level name
+  else if re then reinstall verbose_level debug_level name test doc dev_setup
+  else build verbose_level debug_level name test doc dev_setup
 
 let cmd =
   let doc = "Installs an opam package in the default switch. No checks, no questions asked." in
   let info = Cmd.info "day10-install" ~version:"%%VERSION%%" ~doc in
-  Cmd.v info Term.(const main $ verbose_level $ debug_level $ package_name $ with_test $ with_doc $ with_dev_setup $ uninstall_flag)
+  Cmd.v info Term.(const main $ verbose_level $ debug_level $ package_name $ with_test $ with_doc $ with_dev_setup $ uninstall_flag $ reinstall_flag)
 
 let () = exit (Cmd.eval' cmd)
