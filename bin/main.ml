@@ -20,8 +20,8 @@ let init_opam verbose_level debug_level =
   OpamArg.init_opam_env_variabes OpamCLIVersion.Sourced.current;
   let yes = Some (Some true) in
   let confirm_level = Some `unsafe_yes in
-  let verbose_level = if List.is_empty verbose_level then None else Some (List.length verbose_level) in
-  let debug_level = if List.is_empty debug_level then None else Some (List.length debug_level) in
+  let verbose_level = if verbose_level = [] then None else Some (List.length verbose_level) in
+  let debug_level = if debug_level = [] then None else Some (List.length debug_level) in
   OpamCoreConfig.init ?yes ?confirm_level ?verbose_level ?debug_level ();
   OpamFormatConfig.init ();
   OpamRepositoryConfig.init ();

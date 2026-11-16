@@ -9,9 +9,9 @@ license: "MIT"
 homepage: "https://github.com/mtelvers/day10-install"
 bug-reports: "https://github.com/mtelvers/day10-install/issues"
 depends: [
-  "ocaml" {>= "5.3.0"}
+  "ocaml" {>= "4.14.0"}
   "dune" {>= "3.16"}
-  "opam-client" {>= "2.3.0"}
+  "opam-client" {>= "2.3.0" & < "2.5"}
   "cmdliner" {< "2.0.0"}
   "odoc" {with-doc}
 ]
