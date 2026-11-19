@@ -172,15 +172,24 @@ let depexts_only_flag =
            own is run.  The step that needs the network, so a caller can run it with the network and the rest \
            without.")
 
+(* --depexts-only is a run of its own, so it takes neither --uninstall nor
+   --reinstall.  Those two keep what they always did together. *)
 let main verbose_level debug_level name test doc dev_setup remove re depexts_only =
-  if depexts_only then build ~depexts_only verbose_level debug_level name test doc dev_setup
-  else if remove then uninstall verbose_level debug_level name
-  else if re then reinstall verbose_level debug_level name test doc dev_setup
-  else build verbose_level debug_level name test doc dev_setup
+  if depexts_only && (remove || re) then `Error (true, "--depexts-only cannot be used with --uninstall or --reinstall")
+  else
+    `Ok
+      (if depexts_only then build ~depexts_only verbose_level debug_level name test doc dev_setup
+       else if remove then uninstall verbose_level debug_level name
+       else if re then reinstall verbose_level debug_level name test doc dev_setup
+       else build verbose_level debug_level name test doc dev_setup)
 
 let cmd =
   let doc = "Installs an opam package in the default switch. No checks, no questions asked." in
   let info = Cmd.info "day10-install" ~version:"%%VERSION%%" ~doc in
-  Cmd.v info Term.(const main $ verbose_level $ debug_level $ package_name $ with_test $ with_doc $ with_dev_setup $ uninstall_flag $ reinstall_flag $ depexts_only_flag)
+  Cmd.v info
+    Term.(
+      ret
+        (const main $ verbose_level $ debug_level $ package_name $ with_test $ with_doc $ with_dev_setup $ uninstall_flag $ reinstall_flag
+       $ depexts_only_flag))
 
 let () = exit (Cmd.eval' cmd)
