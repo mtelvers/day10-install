@@ -53,7 +53,7 @@ let parse_package st name =
       OpamConsole.error_and_exit `Not_found "%s" (OpamSwitchState.not_found_message st (OpamSolution.eq_atom_of_package pkg))
   | Some pkg -> pkg
 
-let install_package st pkg test doc dev_setup =
+let install_package ?(depexts_only = false) st pkg test doc dev_setup =
       let name = OpamPackage.to_string pkg in
       let src = source_dir st pkg in
       let build_dir = OpamPath.Switch.build_dir st.switch_global.root st.switch in
@@ -78,6 +78,7 @@ let install_package st pkg test doc dev_setup =
         | None ->
             ignore (OpamSolution.install_depexts ~confirm:false ~pkg_to_install:(OpamPackage.Set.singleton pkg) ~pkg_installed:st.installed st)
       end;
+      if depexts_only then 0 else
       OpamAction.download_package st pkg |> OpamProcess.Job.run |> function
       | Some (_, e) ->
           Printf.printf "download failed... %s\n" e;
@@ -130,9 +131,9 @@ let uninstall_package (st : OpamStateTypes.rw OpamStateTypes.switch_state) pkg =
         OpamAction.cleanup_package_artefacts st pkg;
         (rc, st)
 
-let build verbose_level debug_level name test doc dev_setup =
+let build ?depexts_only verbose_level debug_level name test doc dev_setup =
   init_opam verbose_level debug_level;
-  with_switch_state (fun st -> install_package st (parse_package st name) test doc dev_setup)
+  with_switch_state (fun st -> install_package ?depexts_only st (parse_package st name) test doc dev_setup)
 
 let uninstall verbose_level debug_level name =
   init_opam verbose_level debug_level;
@@ -162,14 +163,24 @@ let uninstall_flag = Arg.(value & flag & info [ "uninstall" ] ~doc:"Uninstall th
 
 let reinstall_flag = Arg.(value & flag & info [ "reinstall" ] ~doc:"Uninstall the package first if it is installed, then install it.")
 
-let main verbose_level debug_level name test doc dev_setup remove re =
-  if remove then uninstall verbose_level debug_level name
+let depexts_only_flag =
+  Arg.(
+    value & flag
+    & info [ "depexts-only" ]
+        ~doc:
+          "Install the package's system dependencies, then stop, before its sources are fetched or anything of its \
+           own is run.  The step that needs the network, so a caller can run it with the network and the rest \
+           without.")
+
+let main verbose_level debug_level name test doc dev_setup remove re depexts_only =
+  if depexts_only then build ~depexts_only verbose_level debug_level name test doc dev_setup
+  else if remove then uninstall verbose_level debug_level name
   else if re then reinstall verbose_level debug_level name test doc dev_setup
   else build verbose_level debug_level name test doc dev_setup
 
 let cmd =
   let doc = "Installs an opam package in the default switch. No checks, no questions asked." in
   let info = Cmd.info "day10-install" ~version:"%%VERSION%%" ~doc in
-  Cmd.v info Term.(const main $ verbose_level $ debug_level $ package_name $ with_test $ with_doc $ with_dev_setup $ uninstall_flag $ reinstall_flag)
+  Cmd.v info Term.(const main $ verbose_level $ debug_level $ package_name $ with_test $ with_doc $ with_dev_setup $ uninstall_flag $ reinstall_flag $ depexts_only_flag)
 
 let () = exit (Cmd.eval' cmd)
