@@ -18,7 +18,7 @@
  (synopsis "Extract the build commands from an opam file.")
  (description "Extract and optionally execute the build commands from an opam file.")
  (depends
-  (ocaml (>= 4.14.0))
+  (ocaml (and (>= 4.14.0) (< 5.0)))
   dune
   (opam-client (and (>= 2.3.0) (< 2.5)))
   (cmdliner (< 2.0.0))))
